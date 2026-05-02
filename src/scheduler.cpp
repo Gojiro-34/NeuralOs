@@ -118,8 +118,8 @@ static void adapt_weights() {
     weights.w_age      /= total;
     weights.w_io       /= total;
 
-    printf("[SCHED] Weight update cycle %d: burst=%.2f prio=%.2f age=%.2f io=%.2f\n",
-           sched_cycle, weights.w_burst, weights.w_priority, weights.w_age, weights.w_io);
+    log_event("SCHED weight update cycle=%d burst=%.2f prio=%.2f age=%.2f io=%.2f",
+              sched_cycle, weights.w_burst, weights.w_priority, weights.w_age, weights.w_io);
 
     starvation_count = 0;
     ctx_switches     = 0;
@@ -170,8 +170,8 @@ bool sched_enqueue(PCB* pcb) {
     int lvl = (int)pcb->level;
     bool ok = queue_push(q[lvl], (int)pcb->pid);
     if (ok)
-        printf("[SCHED] Enqueued  pid=%d (%s)  → L%d\n",
-               pcb->pid, pcb->name, lvl);
+        log_event("SCHED enqueued pid=%d name=%s level=L%d",
+                  pcb->pid, pcb->name, lvl);
     return ok;
 }
 
@@ -211,7 +211,7 @@ pid_t sched_tick() {
             }
         }
         ctx_switches++;
-        printf("[SCHED] Dispatch pid=%d  cycle=%d\n", next, sched_cycle);
+        log_event("SCHED dispatch pid=%d cycle=%d", next, sched_cycle);
     }
     return next;
 }
@@ -228,7 +228,7 @@ void scheduler_init() {
     ctx_switches     = 0;
     // default weights
     weights = { 0.25f, 0.35f, 0.25f, 0.15f };
-    printf("[SCHED] Scheduler initialised. Weights: burst=%.2f prio=%.2f age=%.2f io=%.2f\n",
+    printf("  [BOOT] Scheduler initialised. Weights: burst=%.2f prio=%.2f age=%.2f io=%.2f\n",
            weights.w_burst, weights.w_priority, weights.w_age, weights.w_io);
 }
 
