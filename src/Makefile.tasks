@@ -5,7 +5,7 @@
 # Compiles each task_*.cpp into a standalone binary under bin/
 #
 # Usage:
-#   make tasks       — build all 5 task binaries
+#   make tasks       — build all 18 task binaries
 #   make bin/task_clock  — build just AdaptiveClock
 #   make clean_tasks — remove all task binaries
 #
@@ -14,30 +14,40 @@
 # ============================================================
 
 CXX      := g++
-CXXFLAGS := -std=c++17 -Wall -Wextra -O2
-BINDIR   := bin
+CXXFLAGS := -std=c++17 -Wall -Wextra -O2 -I../include
+BINDIR   := ../bin
 
-# ── Task source → binary mapping ────────────────────────────
-TASK_SRCS := task_clock.cpp task_calculator.cpp task_cognipad.cpp \
-             task_syspulse.cpp task_shell.cpp
-
-TASK_BINS := $(BINDIR)/task_clock    \
-             $(BINDIR)/task_calculator \
-             $(BINDIR)/task_cognipad   \
-             $(BINDIR)/task_syspulse   \
-             $(BINDIR)/task_shell
+# ── All 18 task binaries ─────────────────────────────────────
+TASK_BINS := $(BINDIR)/task_clock       \
+             $(BINDIR)/task_calculator  \
+             $(BINDIR)/task_cognipad    \
+             $(BINDIR)/task_syspulse    \
+             $(BINDIR)/task_shell       \
+             $(BINDIR)/task_filemanager \
+             $(BINDIR)/task_fileinfo    \
+             $(BINDIR)/task_music       \
+             $(BINDIR)/task_ghost       \
+             $(BINDIR)/task_minesweeper \
+             $(BINDIR)/task_snake       \
+             $(BINDIR)/task_filecopy    \
+             $(BINDIR)/task_spooler     \
+             $(BINDIR)/task_memstress   \
+             $(BINDIR)/task_hud         \
+             $(BINDIR)/task_deadlock    \
+             $(BINDIR)/task_graveyard   \
+             $(BINDIR)/task_kernel_con
 
 # ── Phony targets ───────────────────────────────────────────
 .PHONY: tasks clean_tasks
 
 tasks: $(TASK_BINS)
-	@echo "[BUILD] All task binaries compiled successfully."
+	@echo "[BUILD] All 18 task binaries compiled successfully."
 
 # ── Ensure bin/ directory exists ─────────────────────────────
 $(BINDIR):
 	mkdir -p $(BINDIR)
 
-# ── Individual task rules ────────────────────────────────────
+# ── Original 5 tasks ────────────────────────────────────────
 
 $(BINDIR)/task_clock: task_clock.cpp | $(BINDIR)
 	$(CXX) $(CXXFLAGS) -o $@ $<
@@ -58,6 +68,61 @@ $(BINDIR)/task_syspulse: task_syspulse.cpp | $(BINDIR)
 $(BINDIR)/task_shell: task_shell.cpp | $(BINDIR)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 	@echo "[BUILD] task_shell → $@"
+
+# ── 13 new stub tasks ───────────────────────────────────────
+
+$(BINDIR)/task_filemanager: task_filemanager.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_filemanager → $@"
+
+$(BINDIR)/task_fileinfo: task_fileinfo.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_fileinfo → $@"
+
+$(BINDIR)/task_music: task_music.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_music → $@"
+
+$(BINDIR)/task_ghost: task_ghost.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_ghost → $@"
+
+$(BINDIR)/task_minesweeper: task_minesweeper.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_minesweeper → $@"
+
+$(BINDIR)/task_snake: task_snake.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_snake → $@"
+
+$(BINDIR)/task_filecopy: task_filecopy.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_filecopy → $@"
+
+$(BINDIR)/task_spooler: task_spooler.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_spooler → $@"
+
+$(BINDIR)/task_memstress: task_memstress.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_memstress → $@"
+
+$(BINDIR)/task_hud: task_hud.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_hud → $@"
+
+# DeadlockArena needs -pthread (uses pthread_create/cancel)
+$(BINDIR)/task_deadlock: task_deadlock.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -pthread -o $@ $<
+	@echo "[BUILD] task_deadlock → $@"
+
+$(BINDIR)/task_graveyard: task_graveyard.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_graveyard → $@"
+
+$(BINDIR)/task_kernel_con: task_kernel_con.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_kernel_con → $@"
 
 # ── Cleanup ──────────────────────────────────────────────────
 clean_tasks:
