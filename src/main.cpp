@@ -206,14 +206,8 @@ static void run_shell(int ram_mb) {
      *   ?              — show task menu again
      */
 
-    // ── Auto-start background tasks ─────────────────────────────
-    printf("[KERNEL] Auto-starting background tasks...\n");
-    launch_task_by_name("AdaptiveClock");
-    usleep(80000);
-    launch_task_by_name("SysPulse");
-    usleep(80000);
-    printf("\n");
-
+    // ── Show task menu — user picks what to run ──────────────────
+    (void)ram_mb;  // available for future RAM-guard checks
     print_task_menu();
 
     char line[128];

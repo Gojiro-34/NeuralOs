@@ -10,6 +10,11 @@
 #include <sys/types.h>
 #include <vector>
 
+// Resource IDs
+constexpr int RES_RAM = 0;
+constexpr int RES_HDD = 1;
+constexpr int NUM_RESOURCES = 2;
+
 // ── RAG mutation ─────────────────────────────────────────────
 // Call when a process requests a resource (not yet granted).
 void rag_add_request(pid_t pid, int resource_id);

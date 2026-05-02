@@ -23,9 +23,8 @@
 #include <pthread.h>
 
 // ──────────────────────────────────────────────────────────────
-//  Resource IDs
+//  Resource helpers
 // ──────────────────────────────────────────────────────────────
-static constexpr int NUM_RESOURCES = 2;   // 0 = RAM, 1 = HDD
 
 static const char* resource_name(int id) {
     switch (id) {
