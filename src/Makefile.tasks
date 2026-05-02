@@ -1,0 +1,65 @@
+# ============================================================
+# NeuralOS X — Makefile for Task Binaries  (Phase 3)
+# CL-2006 Operating Systems Lab | Spring 2026
+# ============================================================
+# Compiles each task_*.cpp into a standalone binary under bin/
+#
+# Usage:
+#   make tasks       — build all 5 task binaries
+#   make bin/task_clock  — build just AdaptiveClock
+#   make clean_tasks — remove all task binaries
+#
+# Merge into your main Makefile, or include via:
+#   include Makefile.tasks
+# ============================================================
+
+CXX      := g++
+CXXFLAGS := -std=c++17 -Wall -Wextra -O2
+BINDIR   := bin
+
+# ── Task source → binary mapping ────────────────────────────
+TASK_SRCS := task_clock.cpp task_calculator.cpp task_cognipad.cpp \
+             task_syspulse.cpp task_shell.cpp
+
+TASK_BINS := $(BINDIR)/task_clock    \
+             $(BINDIR)/task_calculator \
+             $(BINDIR)/task_cognipad   \
+             $(BINDIR)/task_syspulse   \
+             $(BINDIR)/task_shell
+
+# ── Phony targets ───────────────────────────────────────────
+.PHONY: tasks clean_tasks
+
+tasks: $(TASK_BINS)
+	@echo "[BUILD] All task binaries compiled successfully."
+
+# ── Ensure bin/ directory exists ─────────────────────────────
+$(BINDIR):
+	mkdir -p $(BINDIR)
+
+# ── Individual task rules ────────────────────────────────────
+
+$(BINDIR)/task_clock: task_clock.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_clock → $@"
+
+$(BINDIR)/task_calculator: task_calculator.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_calculator → $@"
+
+$(BINDIR)/task_cognipad: task_cognipad.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_cognipad → $@"
+
+$(BINDIR)/task_syspulse: task_syspulse.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_syspulse → $@"
+
+$(BINDIR)/task_shell: task_shell.cpp | $(BINDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+	@echo "[BUILD] task_shell → $@"
+
+# ── Cleanup ──────────────────────────────────────────────────
+clean_tasks:
+	rm -f $(TASK_BINS)
+	@echo "[CLEAN] Task binaries removed."

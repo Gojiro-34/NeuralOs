@@ -1,0 +1,17 @@
+# Compiled binaries
+NeuralOS_X
+bin/
+
+# Object files
+*.o
+*.out
+
+# Log files
+logs/
+
+# VS Code
+.vscode/
+
+# Misc
+*.zip
+*.DS_Store
