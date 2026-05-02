@@ -127,17 +127,37 @@ static void adapt_weights() {
 
 // ──────────────────────────────────────────────────────────────
 //  Priority Aging
+//  "If a process waits too long in the ready queue, its priority
+//   should gradually increase (aging technique) to prevent
+//   starvation."  — Project Manual
+//
+//  Mechanism:
+//    • Every sched_tick(), wait_cycles increments for READY procs.
+//    • Once wait_cycles >= AGING_THRESHOLD, effective_priority
+//      increases by AGING_STEP each tick (capped at 20).
+//    • When the process is dispatched, wait_cycles resets to 0 and
+//      effective_priority resets to base_priority (see sched_tick).
+//    • Each promotion is logged to the system log file.
 // ──────────────────────────────────────────────────────────────
 static void apply_aging() {
     PCB* table = get_proc_table();
     int  n     = get_proc_count();
     for (int i = 0; i < n; i++) {
         PCB& p = table[i];
-        if (p.state != ProcState::READY) continue;
+        if (p.pid == 0 || p.state != ProcState::READY) continue;
         p.wait_cycles++;
         if (p.wait_cycles >= AGING_THRESHOLD) {
+            int old_prio = p.effective_priority;
             p.effective_priority += AGING_STEP;
             if (p.effective_priority > 20) p.effective_priority = 20; // cap
+
+            // Log every promotion event to the system log file
+            if (p.effective_priority != old_prio) {
+                log_event("AGING pid=%d name=%s base=%d effective=%d→%d wait_cycles=%d",
+                          p.pid, p.name, p.base_priority,
+                          old_prio, p.effective_priority, p.wait_cycles);
+            }
+
             if (p.wait_cycles % 10 == 0) starvation_count++;
         }
     }
@@ -215,4 +235,45 @@ void scheduler_init() {
 void print_scheduler_state() {
     printf("[SCHED] Queues — L0(Reflex):%d  L1(Focused):%d  L2(Background):%d\n",
            q[0].count, q[1].count, q[2].count);
+}
+
+// ──────────────────────────────────────────────────────────────
+//  Aging Report — prints the priority/aging state of every process
+// ──────────────────────────────────────────────────────────────
+void print_aging_report() {
+    PCB* table = get_proc_table();
+    int  n     = get_proc_count();
+
+    printf("\n[SCHED] ──── Aging Report (cycle %d) ────────────────────\n", sched_cycle);
+    printf("  %-6s  %-20s  %-6s  %-6s  %-6s  %s\n",
+           "PID", "Name", "Base", "Eff.", "Wait", "State");
+    printf("  %-6s  %-20s  %-6s  %-6s  %-6s  %s\n",
+           "------", "--------------------", "------", "------", "------", "----------");
+
+    for (int i = 0; i < n; i++) {
+        PCB& p = table[i];
+        if (p.pid == 0) continue;
+
+        const char* st = "?";
+        switch (p.state) {
+            case ProcState::READY:      st = "READY";      break;
+            case ProcState::RUNNING:    st = "RUNNING";    break;
+            case ProcState::BLOCKED:    st = "BLOCKED";    break;
+            case ProcState::TERMINATED: st = "TERMINATED"; break;
+            case ProcState::ZOMBIE:     st = "ZOMBIE";     break;
+        }
+
+        if (p.state == ProcState::TERMINATED) continue;
+
+        printf("  %-6d  %-20s  %-6d  %-6d  %-6d  %s",
+               p.pid, p.name, p.base_priority,
+               p.effective_priority, p.wait_cycles, st);
+
+        // Mark processes that have been aged
+        if (p.effective_priority > p.base_priority)
+            printf("  ↑ aged +%d", p.effective_priority - p.base_priority);
+
+        printf("\n");
+    }
+    printf("[SCHED] ──────────────────────────────────────────────────\n\n");
 }

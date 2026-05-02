@@ -147,6 +147,7 @@ static void kernel_mode_console() {
      * Type 'exit' to return to user mode.
      */
     printf("\n[KERNEL MODE] Entered. Type 'fkill <pid>' or 'exit'.\n");
+    log_event("KERNEL_MODE entered by user");
     char line[128];
     while (true) {
         printf("kernel# ");
@@ -158,6 +159,7 @@ static void kernel_mode_console() {
 
         if (strcmp(line, "exit") == 0) {
             printf("[KERNEL MODE] Returning to user mode.\n\n");
+            log_event("KERNEL_MODE exited by user");
             break;
         }
 
@@ -167,10 +169,12 @@ static void kernel_mode_console() {
                 printf("[KERNEL MODE] Invalid pid.\n");
                 continue;
             }
-            if (kill(target, SIGKILL) == 0)
+            if (kill(target, SIGKILL) == 0) {
                 printf("[KERNEL MODE] SIGKILL sent to pid=%d\n", target);
-            else
+                log_event("KERNEL_MODE fkill pid=%d", target);
+            } else {
                 perror("[KERNEL MODE] kill failed");
+            }
             continue;
         }
 
@@ -242,6 +246,12 @@ static void run_shell(int ram_mb) {
         if (strcmp(line, "ps") == 0) {
             print_resource_state();
             print_scheduler_state();
+            continue;
+        }
+
+        // ── Command: aging (show aging report) ───────────────────
+        if (strcmp(line, "aging") == 0) {
+            print_aging_report();
             continue;
         }
 

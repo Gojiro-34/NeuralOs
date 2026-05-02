@@ -9,6 +9,7 @@
 
 #include "../include/kernel.h"
 #include "memory.cpp"    // pull in memory subsystem
+#include "deadlock_detector.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -187,6 +188,10 @@ bool handle_resource_request(IPC_Message* req, int reply_fd, PCB* pcb) {
         pcb->hdd_mb  = req->hdd_mb;
         pthread_mutex_unlock(&proc_table_mutex);
 
+        // ── RAG: record allocation ──────────────────────────────
+        if (req->ram_mb > 0) rag_add_allocation(req->pid, RES_RAM);
+        if (req->hdd_mb > 0) rag_add_allocation(req->pid, RES_HDD);
+
         printf("[RM] GRANTED  pid=%-6d  task=%-24s  RAM=%3d MiB  HDD=%3d MiB"
                "  (used %d/%d MiB RAM)\n",
                req->pid, req->task_name, req->ram_mb, req->hdd_mb,
@@ -199,6 +204,22 @@ bool handle_resource_request(IPC_Message* req, int reply_fd, PCB* pcb) {
         pthread_mutex_lock(&proc_table_mutex);
         pcb->state = ProcState::TERMINATED;
         pthread_mutex_unlock(&proc_table_mutex);
+
+        // ── RAG: record blocked request + check for deadlock ────
+        if (req->ram_mb > 0) rag_add_request(req->pid, RES_RAM);
+        if (req->hdd_mb > 0) rag_add_request(req->pid, RES_HDD);
+
+        std::vector<pid_t> cycle_pids;
+        if (detect_deadlock(cycle_pids)) {
+            printf("\n[DEADLOCK] *** Deadlock detected among processes: [");
+            for (size_t i = 0; i < cycle_pids.size(); i++) {
+                if (i > 0) printf(", ");
+                printf("%d", cycle_pids[i]);
+            }
+            printf("] ***\n\n");
+            log_event("DEADLOCK detected — %zu processes involved",
+                      cycle_pids.size());
+        }
 
         printf("[RM] DENIED   pid=%-6d  task=%-24s  RAM=%3d MiB  HDD=%3d MiB"
                "  (used %d/%d MiB RAM, mood=%s)\n",
@@ -226,6 +247,10 @@ void on_process_exit(pid_t pid) {
     pthread_mutex_unlock(&proc_table_mutex);
 
     resource_release(ram, hdd);
+
+    // ── RAG: remove terminated process from graph ────────────
+    rag_remove(pid);
+
     mem_print_stats();
 
     log_event("TERMINATED pid=%d name=%s ram_freed=%d", pid, pcb->name, ram);
