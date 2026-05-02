@@ -9,7 +9,7 @@
 
 #include "../include/kernel.h"
 #include "memory.cpp"    // pull in memory subsystem
-#include "deadlock_detector.h"
+#include "deadlock_detector.cpp"  // pull in RAG + cycle detection
 
 #include <cstdio>
 #include <cstdlib>
