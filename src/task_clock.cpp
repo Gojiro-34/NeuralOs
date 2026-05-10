@@ -24,7 +24,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-// ── IPC message struct (must match kernel.h layout exactly) ──
+// IPC message struct (must match kernel.h layout exactly) 
 enum class IPC_MsgType : uint8_t {
     RESOURCE_REQUEST = 1,
     RESOURCE_GRANTED,
@@ -41,17 +41,17 @@ struct IPC_Message {
     int32_t     hdd_mb;
 };
 
-// ── Globals ──────────────────────────────────────────────────
+// Globals 
 static volatile sig_atomic_t g_terminate = 0;
 static int g_read_fd  = -1;
 static int g_write_fd = -1;
 
-// ── SIGTERM handler ─────────────────────────────────────────
+// SIGTERM handler
 static void sigterm_handler(int) {
     g_terminate = 1;
 }
 
-// ── Send TASK_DONE and exit cleanly ─────────────────────────
+// Send TASK_DONE and exit cleanly 
 static void send_task_done_and_exit() {
     IPC_Message msg;
     memset(&msg, 0, sizeof(msg));
@@ -69,7 +69,7 @@ static void send_task_done_and_exit() {
     _exit(0);
 }
 
-// ── main ────────────────────────────────────────────────────
+//  main 
 int main(int argc, char* argv[]) {
     if (argc < 3) {
         fprintf(stderr, "[AdaptiveClock] Usage: %s <read_fd> <write_fd>\n", argv[0]);
@@ -87,24 +87,24 @@ int main(int argc, char* argv[]) {
     sigemptyset(&sa.sa_mask);
     sigaction(SIGTERM, &sa, nullptr);
 
-    printf("[AdaptiveClock] Started (pid=%d). Will run for 10 seconds.\n", getpid());
+    printf("[AdaptiveClock] Started (pid=%d). Will run continuously.\n", getpid());
 
-    const int DURATION_SEC = 10;
-
-    for (int elapsed = 0; elapsed < DURATION_SEC && !g_terminate; ++elapsed) {
+    int elapsed = 0;
+    while (!g_terminate) {
         time_t now = time(nullptr);
         struct tm* lt = localtime(&now);
 
         char timebuf[64];
         strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", lt);
-        printf("[AdaptiveClock] [%02d/%02ds] %s\n", elapsed + 1, DURATION_SEC, timebuf);
+        // Using \r to overwrite the same line instead of \n
+        printf("\r[AdaptiveClock] [%02ds elapsed] %s   ", ++elapsed, timebuf);
         fflush(stdout);
 
         sleep(1);
     }
 
     if (g_terminate) {
-        printf("[AdaptiveClock] Received SIGTERM — shutting down.\n");
+        printf("\n[AdaptiveClock] Received SIGTERM — shutting down.\n");
     }
 
     send_task_done_and_exit();
