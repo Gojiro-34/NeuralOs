@@ -114,8 +114,9 @@ int main(int argc, char* argv[]) {
         print_grid(score);
         fflush(stdout);
 
+        bool dir_changed = false;
         for(int t = 0; t < 200; t += 10) {
-            if (_kbhit()) {
+            if (_kbhit() && !dir_changed) {
                 int ch = _getch();
                 if (ch == 'q') {
                     running = false;
@@ -124,17 +125,16 @@ int main(int argc, char* argv[]) {
                 if (ch == 224 || ch == 0) { // Arrow keys
                     ch = _getch();
                     switch(ch) {
-                        case 72: if (dir_r !=  1) { dir_r = -1; dir_c =  0; } break; // Up
-                        case 80: if (dir_r != -1) { dir_r =  1; dir_c =  0; } break; // Down
-                        case 77: if (dir_c != -1) { dir_r =  0; dir_c =  1; } break; // Right
-                        case 75: if (dir_c !=  1) { dir_r =  0; dir_c = -1; } break; // Left
+                        case 72: if (dir_r !=  1) { dir_r = -1; dir_c =  0; dir_changed = true; } break; // Up
+                        case 80: if (dir_r != -1) { dir_r =  1; dir_c =  0; dir_changed = true; } break; // Down
+                        case 77: if (dir_c != -1) { dir_r =  0; dir_c =  1; dir_changed = true; } break; // Right
+                        case 75: if (dir_c !=  1) { dir_r =  0; dir_c = -1; dir_changed = true; } break; // Left
                     }
-                    break;
                 } else {
-                    if (ch == 'w' && dir_r !=  1) { dir_r = -1; dir_c =  0; break; }
-                    if (ch == 's' && dir_r != -1) { dir_r =  1; dir_c =  0; break; }
-                    if (ch == 'a' && dir_c !=  1) { dir_r =  0; dir_c = -1; break; }
-                    if (ch == 'd' && dir_c != -1) { dir_r =  0; dir_c =  1; break; }
+                    if (ch == 'w' && dir_r !=  1) { dir_r = -1; dir_c =  0; dir_changed = true; }
+                    else if (ch == 's' && dir_r != -1) { dir_r =  1; dir_c =  0; dir_changed = true; }
+                    else if (ch == 'a' && dir_c !=  1) { dir_r =  0; dir_c = -1; dir_changed = true; }
+                    else if (ch == 'd' && dir_c != -1) { dir_r =  0; dir_c =  1; dir_changed = true; }
                 }
             }
             Sleep(10);
