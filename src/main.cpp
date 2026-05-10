@@ -169,8 +169,8 @@ static void kernel_mode_console() {
                 printf("[KERNEL MODE] Invalid pid.\n");
                 continue;
             }
-            if (kill(target, SIGKILL) == 0) {
-                printf("[KERNEL MODE] SIGKILL sent to pid=%d\n", target);
+            if (kill(target, SIGKILL) == 0 || kill(-target, SIGKILL) == 0) {
+                printf("[KERNEL MODE] SIGKILL sent to pid=%d (process group)\n", target);
                 log_event("KERNEL_MODE fkill pid=%d", target);
             } else {
                 perror("[KERNEL MODE] kill failed");
@@ -256,8 +256,9 @@ static void run_shell(int ram_mb) {
                 printf("[SHELL] Usage: kill <pid>\n");
                 continue;
             }
-            if (kill(target, SIGTERM) == 0)
-                printf("[SHELL] SIGTERM sent to pid=%d\n", target);
+            // Kill entire process group (xterm + child task)
+            if (kill(-target, SIGTERM) == 0 || kill(target, SIGTERM) == 0)
+                printf("[SHELL] SIGTERM sent to pid=%d (process group)\n", target);
             else
                 perror("[SHELL] kill failed");
             continue;

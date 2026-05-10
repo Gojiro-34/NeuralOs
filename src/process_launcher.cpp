@@ -96,6 +96,10 @@ pid_t launch_task(const TaskDesc& td) {
 
     if (pid == 0) {
         // ── Child Process ────────────────────────────────────────
+        // Become a process group leader so kill(-pid) can terminate
+        // both xterm and the task binary inside it.
+        setpgid(0, 0);
+
         // Close ends we don't use
         close(k2c[1]);  // child reads from k2c[0]
         close(c2k[0]);  // child writes to c2k[1]
@@ -119,13 +123,37 @@ pid_t launch_task(const TaskDesc& td) {
             _exit(1);
         }
 
-        // ── Resources GRANTED — exec the binary ──────────────────
-        // Pass pipe FDs as environment-like args so the binary can
-        // use them for further IPC. We encode as argv[1] and argv[2].
+        // ── Resources GRANTED — launch in a separate xterm window ─
+        // Pass pipe FDs as argv so the binary can use them for IPC.
         char fd_read_buf[16], fd_write_buf[16];
         snprintf(fd_read_buf,  sizeof(fd_read_buf),  "%d", k2c[0]);
         snprintf(fd_write_buf, sizeof(fd_write_buf), "%d", c2k[1]);
 
+        // Build xterm window title
+        char title_buf[64];
+        snprintf(title_buf, sizeof(title_buf),
+                 "NeuralOS X  —  %s  [pid=%d]", td.name, getpid());
+
+        // Launch in a new xterm window with styled appearance
+        char* xterm_argv[] = {
+            (char*)"xterm",
+            (char*)"-T",        title_buf,          // window title
+            (char*)"-fa",       (char*)"Monospace",  // font family
+            (char*)"-fs",       (char*)"13",         // font size
+            (char*)"-bg",       (char*)"#1a1a2e",    // dark background
+            (char*)"-fg",       (char*)"#00ff88",    // green text
+            (char*)"-geometry", (char*)"90x30",      // 90 cols × 30 rows
+            (char*)"-e",                             // execute command:
+            (char*)td.binary,
+            fd_read_buf,
+            fd_write_buf,
+            nullptr
+        };
+        execvp("xterm", xterm_argv);
+
+        // ── xterm not found — try direct exec as fallback ────────
+        fprintf(stderr, "[TASK:%s] xterm not available, launching in current terminal\n",
+                td.name);
         char* argv[] = {
             (char*)td.binary,
             fd_read_buf,
@@ -134,10 +162,9 @@ pid_t launch_task(const TaskDesc& td) {
         };
         execvp(td.binary, argv);
 
-        // execvp only returns on error — fall back to a built-in stub
+        // ── Both failed — fall back to a built-in stub ───────────
         fprintf(stderr, "[TASK:%s] execvp failed (%s) — running built-in stub\n",
                 td.name, strerror(errno));
-        // Stub: simulate work then exit
         printf("[STUB:%s] Running task simulation (pid=%d)...\n", td.name, getpid());
         usleep(200000 + (getpid() % 300) * 1000); // 200-500 ms of "work"
         printf("[STUB:%s] Task complete.\n", td.name);
@@ -218,7 +245,8 @@ void shutdown_all() {
         if (table[i].pid != 0 && table[i].state != ProcState::TERMINATED) {
             printf("[KERNEL] SIGTERM → pid=%d (%s)\n",
                    table[i].pid, table[i].name);
-            kill(table[i].pid, SIGTERM);
+            // Kill entire process group (xterm + child task binary)
+            kill(-table[i].pid, SIGTERM);
         }
     }
 
@@ -228,7 +256,8 @@ void shutdown_all() {
         if (table[i].pid != 0 && table[i].state != ProcState::TERMINATED) {
             printf("[KERNEL] SIGKILL → pid=%d (%s)\n",
                    table[i].pid, table[i].name);
-            kill(table[i].pid, SIGKILL);
+            // Kill entire process group (xterm + child task binary)
+            kill(-table[i].pid, SIGKILL);
         }
     }
 

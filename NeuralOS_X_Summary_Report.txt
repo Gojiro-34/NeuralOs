@@ -1,0 +1,551 @@
+================================================================================
+              NeuralOS X — Phase 3  |  Project Summary Report
+              CL-2006 Operating Systems Lab  |  Spring 2026
+================================================================================
+  Generated: 2026-05-10
+================================================================================
+
+
+1. PROJECT OVERVIEW
+================================================================================
+
+  NeuralOS X is a Mini Operating System Simulator built in C++17 for the
+  CL-2006 Operating Systems Lab course (Spring 2026). It simulates core OS
+  concepts including process management, CPU scheduling, memory management,
+  inter-process communication (IPC), resource allocation, and deadlock
+  detection — all running on a Linux/POSIX host via fork(), exec(), pipes,
+  and pthreads.
+
+  Usage:  ./NeuralOS_X <RAM_GB> <HDD_GB> <CORES>
+  Example: ./NeuralOS_X 1 10 2
+
+
+2. DIRECTORY STRUCTURE
+================================================================================
+
+  NeuralOS_Phase3/
+  ├── Makefile                  — Top-level build (kernel binary)
+  ├── NeuralOS_X                — Compiled kernel executable
+  ├── include/
+  │   └── kernel.h              — Core header (PCB, IPC, enums, constants)
+  ├── src/
+  │   ├── main.cpp              — Kernel entry point & interactive shell
+  │   ├── scheduler.cpp         — 3-level adaptive scheduler with aging
+  │   ├── resource_manager.cpp  — RAM/HDD tracking, mood state, IPC grant/deny
+  │   ├── memory.cpp            — E820 memory map, page allocator
+  │   ├── process_launcher.cpp  — fork/exec launcher, SIGCHLD reaper
+  │   ├── deadlock_detector.cpp — RAG-based cycle detection (DFS)
+  │   ├── deadlock_detector.h   — Deadlock detector header
+  │   ├── Makefile.tasks        — Build rules for all 18 task binaries
+  │   ├── task_shell.cpp        — NeuralShell (interactive shell task)
+  │   ├── task_cognipad.cpp     — CogniPad (auto-save notepad)
+  │   ├── task_calculator.cpp   — CalculatorPro (calculator)
+  │   ├── task_clock.cpp        — AdaptiveClock (live clock, background)
+  │   ├── task_syspulse.cpp     — SysPulse (system monitor, background)
+  │   ├── task_filemanager.cpp  — FileManager (file operations)
+  │   ├── task_fileinfo.cpp     — FileInfoInspector (file info viewer)
+  │   ├── task_music.cpp        — MusicPlayer (music player, background)
+  │   ├── task_ghost.cpp        — GhostTyper (typewriter effect)
+  │   ├── task_minesweeper.cpp  — Minesweeper (game)
+  │   ├── task_snake.cpp        — SnakeGame (game)
+  │   ├── task_filecopy.cpp     — FileCopySimulator (file copy task)
+  │   ├── task_spooler.cpp      — PrintSpooler (print spooler, background)
+  │   ├── task_memstress.cpp    — MemStressTester (memory stress test)
+  │   ├── task_hud.cpp          — CognitiveHUD (HUD display, background)
+  │   ├── task_deadlock.cpp     — DeadlockArena (deadlock demo)
+  │   ├── task_graveyard.cpp    — ProcessGraveyard (terminated process log)
+  │   └── task_kernel_con.cpp   — KernelModeConsole (kernel mode console)
+  ├── bin/                      — Compiled task binaries
+  └── logs/
+      └── neuralOS_log.txt      — Runtime system log
+
+
+3. BUILD SYSTEM
+================================================================================
+
+  Compiler:    g++ (C++17)
+  Flags:       -std=c++17 -Wall -Wextra -Wpedantic -pthread -g
+  Build:       make           (builds the kernel binary NeuralOS_X)
+  Run:         make run       (builds and runs with 1 GB RAM, 10 GB HDD, 2 cores)
+  Clean:       make clean     (removes binary and log file)
+
+  Task binaries are compiled separately via src/Makefile.tasks into bin/.
+
+
+4. CORE DATA STRUCTURES  (defined in include/kernel.h)
+================================================================================
+
+  4.1  E820 Memory Map Entry
+  ─────────────────────────
+    struct E820 {
+        uint64_t base;       // Start address of region
+        uint64_t length;     // Length in bytes
+        uint32_t type;       // 1=usable, 2=reserved, 3=ACPI, 4=NVS, 5=bad
+        uint32_t attrs;      // Extended attributes
+    };
+
+  4.2  Free Region / Page Tracking
+  ────────────────────────────────
+    struct FreeRegion { base, length, *next };   — Linked list of free E820 regions
+    struct Page       { address, in_use, *next }; — Linked list of free 4 KiB pages
+
+  4.3  IPC Message
+  ────────────────
+    enum class IPC_MsgType : uint8_t {
+        RESOURCE_REQUEST = 1, RESOURCE_GRANTED, RESOURCE_DENIED,
+        TASK_DONE, HEARTBEAT
+    };
+    struct IPC_Message { type, pid, task_name[32], ram_mb, hdd_mb };
+
+  4.4  Process Control Block (PCB)
+  ────────────────────────────────
+    struct PCB {
+        pid_t pid;                    char name[32];
+        ProcState state;              Archetype archetype;
+        SchedLevel level;             int32_t ram_mb, hdd_mb;
+        int base_priority;            int effective_priority;
+        int wait_cycles;              int burst_estimate;
+        int read_fd, write_fd;        uint64_t cpu_time_ms, arrival_time_ms;
+    };
+
+  4.5  Process States
+  ───────────────────
+    enum class ProcState { READY, RUNNING, BLOCKED, TERMINATED, ZOMBIE };
+
+  4.6  Process Archetypes
+  ───────────────────────
+    enum class Archetype { REFLEX, FOCUSED, BACKGROUND, DORMANT };
+
+  4.7  Scheduler Levels
+  ─────────────────────
+    enum class SchedLevel { L0_REFLEX=0, L1_FOCUSED=1, L2_BACKGROUND=2 };
+
+  4.8  Kernel Mood States
+  ───────────────────────
+    enum class KernelMood { CALM, STRESSED, CRITICAL };
+
+  4.9  Adaptive Weight Vector
+  ───────────────────────────
+    struct WeightVector { w_burst=0.25, w_priority=0.35, w_age=0.25, w_io=0.15 };
+
+  4.10 System Constants
+  ─────────────────────
+    AGING_STEP        = 1       (priority boost per aging event)
+    AGING_THRESHOLD   = 5       (cycles before aging activates)
+    TIME_QUANTUM_MS   = 100     (round-robin time quantum)
+    SCHED_ADAPT_CYCLE = 10      (weight adaptation interval)
+    PAGE_SIZE_BYTES   = 4096    (4 KiB page size)
+
+
+5. MODULE DETAILS
+================================================================================
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  5.1  KERNEL ENTRY POINT  (main.cpp — 361 lines)                       │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+    • Parses command-line arguments: RAM_GB, HDD_GB, CORES.
+    • Displays a staged boot animation (5 stages with delays).
+    • Initialises all subsystems: memory, resource manager, scheduler.
+    • Starts a background scheduler thread (pthread) that calls
+      sched_tick() every TIME_QUANTUM_MS (100ms).
+    • Runs the interactive shell loop (NeuralOS> prompt).
+    • On "shutdown": stops scheduler thread, sends SIGTERM/SIGKILL to
+      all running processes, displays goodbye message.
+
+    Shell Commands:
+      <1-18>     — Launch a task by number
+      ps         — Show all running processes + resource state
+      aging      — Show aging report (priority/wait state per process)
+      kill <pid> — Send SIGTERM to a process
+      kernel     — Enter Kernel Mode Console (fkill, ps, exit)
+      shutdown   — Graceful system shutdown
+      ?          — Show task menu
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  5.2  ADAPTIVE SCHEDULER  (scheduler.cpp — 280 lines)                  │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+    Three-Level Multi-Level Queue (MLQ) Scheduling:
+    ────────────────────────────────────────────────
+      L0 (Reflex)     — Round Robin (FIFO pop)
+      L1 (Focused)    — Priority Queue (highest effective_priority first)
+      L2 (Background) — FCFS (FIFO pop)
+
+    Ready Queue Implementation:
+      Circular array (QUEUE_MAX = 32 entries per level).
+      queue_push(), queue_pop_fifo(), queue_pop_priority().
+
+    Priority Aging (Starvation Prevention):
+    ───────────────────────────────────────
+      • Every sched_tick(), wait_cycles increments for READY processes.
+      • When wait_cycles >= AGING_THRESHOLD (5), effective_priority
+        increases by AGING_STEP (1) each tick, capped at 20.
+      • When a process is dispatched, wait_cycles resets to 0 and
+        effective_priority resets to base_priority.
+      • Every promotion is logged to the system log file.
+
+    Adaptive Weight Vector:
+    ───────────────────────
+      Weights W = [w_burst, w_priority, w_age, w_io] are re-adjusted
+      every SCHED_ADAPT_CYCLE (10) ticks based on:
+        - High starvation  → boost w_age, reduce w_priority & w_burst
+        - High ctx switches → boost w_burst, reduce w_io & w_priority
+      Each weight is clamped to [0.05, 0.70] and re-normalised to sum=1.0.
+
+    Dispatch Logic (sched_tick):
+      1. Increment cycle, apply aging.
+      2. Every 10 cycles, adapt weights.
+      3. Pick next: try L0 first, then L1, then L2.
+      4. Set chosen process to RUNNING, reset wait_cycles & effective_priority.
+      5. Log dispatch event.
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  5.3  RESOURCE MANAGER  (resource_manager.cpp — 325 lines)             │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+    Process Table:
+      Fixed-size array of 32 PCB slots (MAX_PROCS = 32).
+      Thread-safe via proc_table_mutex (pthread_mutex).
+
+    Resource Tracking:
+      Tracks current_ram_used / max_ram_mb and current_hdd_used / max_hdd_mb.
+      Thread-safe via resource_mutex.
+
+    Kernel Mood System:
+      CALM       — RAM < 70%
+      STRESSED   — RAM 70%-90%
+      CRITICAL   — RAM >= 90%  (ALL new launches denied)
+      Mood transitions are logged and printed.
+
+    Grant/Deny Logic:
+      resource_check()  — Verifies enough RAM+HDD; denies if CRITICAL mood.
+      resource_commit() — Deducts resources from available pool.
+      resource_release()— Returns RAM to pool (HDD persists on disk).
+
+    IPC Handling:
+      handle_resource_request() — Reads child's request, grants or denies,
+      sends reply via pipe, updates PCB state, integrates with RAG for
+      deadlock detection.
+
+    System Logging:
+      All events written to logs/neuralOS_log.txt with timestamps and
+      current kernel mood.
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  5.4  MEMORY MANAGER  (memory.cpp — 267 lines)                         │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+    Follows instructor-mandated E820 memory map pattern:
+      • Simulated E820 table with 4 entries (low RAM, BIOS hole, extended
+        RAM, ACPI region).
+      • FreeRegion linked list built from usable E820 entries.
+      • Page free_memory linked list of 4 KiB pages.
+
+    Pre-allocated Pools (slab-style):
+      • region_pool[64]  — FreeRegion nodes
+      • page_pool[4096]  — Page nodes (up to 16 MiB addressable)
+
+    API:
+      init_memory(bytes)     — Builds E820, allocates backing store,
+                                constructs free region and page lists.
+      alloc_pages(n)         — Removes n pages from free list.
+      free_pages(head)       — Returns page chain to free list.
+      mem_alloc_mb(mb)       — MB-level wrapper around alloc_pages.
+      mem_free_mb(head)      — MB-level wrapper around free_pages.
+      mem_free_bytes()       — Counts free pages.
+      mem_print_stats()      — Prints total/used/free memory.
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  5.5  PROCESS LAUNCHER  (process_launcher.cpp — 240 lines)             │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+    Task Descriptor Table:
+      18 tasks defined with: name, binary path, RAM, HDD, priority,
+      archetype, and scheduler level.
+
+    Launch Sequence (launch_task):
+      1. Create two pipe pairs: kernel→child (k2c) and child→kernel (c2k).
+      2. fork() the process.
+      3. Child: sends RESOURCE_REQUEST via pipe, waits for GRANTED/DENIED.
+         If GRANTED: execvp() the task binary (passes pipe FDs as argv).
+         If DENIED: exits with code 1.
+         If execvp fails: runs a built-in stub (200-500ms simulation).
+      4. Parent: registers PCB, reads request, calls handle_resource_request,
+         enqueues granted process into scheduler.
+
+    Signal Handling:
+      SIGCHLD handler — reaps zombie children via waitpid(WNOHANG),
+      calls on_process_exit() to release resources.
+
+    Shutdown:
+      shutdown_all() — SIGTERM to all running processes, waits 2 seconds,
+      then SIGKILL for any remaining. Final zombie reaping.
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  5.6  DEADLOCK DETECTOR  (deadlock_detector.cpp — 254 lines)           │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+    Resource Allocation Graph (RAG):
+      Two resource types: RAM (id=0), HDD (id=1).
+      holder[r]   — PID holding resource r (0 = free).
+      waiters[r]  — Set of PIDs waiting for resource r.
+      all_pids    — Union of all PIDs in the graph.
+      Thread-safe via rag_mutex.
+
+    Graph Encoding:
+      Process nodes = (int)pid  (positive).
+      Resource nodes = -(resource_id + 1)  (negative, e.g., RAM = -1).
+      Edges: process→resource (request), resource→process (allocation).
+
+    Cycle Detection Algorithm:
+      Iterative DFS with 3-colour marking (white/grey/black).
+      Back-edge to a grey node indicates a cycle (deadlock).
+      Path reconstruction extracts the cycle members.
+
+    API:
+      rag_add_request(pid, res_id)     — Record a request edge.
+      rag_add_allocation(pid, res_id)  — Record an allocation edge.
+      rag_remove(pid)                  — Remove process from graph.
+      detect_deadlock(cycle_pids)      — Returns true + involved PIDs if
+                                          a cycle is found.
+
+
+6. TASK BINARIES (18 TOTAL)
+================================================================================
+
+  All task binaries follow the same IPC pipe protocol:
+    argv[1] = read_fd  (kernel → task)
+    argv[2] = write_fd (task → kernel, sends TASK_DONE on exit)
+  All handle SIGTERM for graceful shutdown.
+
+  ┌─────┬──────────────────────┬────────┬──────────────┬────────────────────┐
+  │  #  │  Task Name           │ RAM MB │  Level       │  Description       │
+  ├─────┼──────────────────────┼────────┼──────────────┼────────────────────┤
+  │  1  │ NeuralShell          │   32   │ L0 Reflex    │ Interactive shell  │
+  │  2  │ CogniPad             │   24   │ L1 Focused   │ Auto-save notepad  │
+  │  3  │ CalculatorPro        │   12   │ L0 Reflex    │ Calculator         │
+  │  4  │ AdaptiveClock        │    8   │ L2 Background│ Live clock (10s)   │
+  │  5  │ SysPulse             │   16   │ L2 Background│ System monitor     │
+  │  6  │ FileManager          │   20   │ L1 Focused   │ File operations    │
+  │  7  │ FileInfoInspector    │   10   │ L0 Reflex    │ File info viewer   │
+  │  8  │ MusicPlayer          │   18   │ L2 Background│ Music player       │
+  │  9  │ GhostTyper           │   14   │ L1 Focused   │ Typewriter effect  │
+  │ 10  │ Minesweeper          │   40   │ L1 Focused   │ Minesweeper game   │
+  │ 11  │ SnakeGame            │   36   │ L1 Focused   │ Snake game         │
+  │ 12  │ FileCopySimulator    │   22   │ L2 Background│ File copy task     │
+  │ 13  │ PrintSpooler         │   20   │ L2 Background│ Print spooler      │
+  │ 14  │ MemStressTester      │   64   │ L0 Reflex    │ Memory stress test │
+  │ 15  │ CognitiveHUD         │   28   │ L2 Background│ HUD display        │
+  │ 16  │ DeadlockArena        │   30   │ L1 Focused   │ Deadlock demo      │
+  │ 17  │ ProcessGraveyard     │   16   │ L2 Background│ Terminated proc log│
+  │ 18  │ KernelModeConsole    │   20   │ L0 Reflex    │ Kernel mode console│
+  └─────┴──────────────────────┴────────┴──────────────┴────────────────────┘
+
+  Task Binary Details:
+  ────────────────────
+
+  • AdaptiveClock (task_clock.cpp — 113 lines)
+    Prints current local time once per second. Auto-terminates after 10
+    seconds. Handles SIGTERM for early shutdown.
+
+  • CogniPad (task_cognipad.cpp — 185 lines)
+    Interactive notepad with line buffer (1024 lines × 512 chars).
+    Commands: :save (force write), :quit/:exit (save and exit).
+    Auto-saves every 5 lines. Saves to timestamped file
+    (cognipad_YYYYMMDD_HHMMSS.txt). SIGTERM triggers auto-save.
+
+  • CalculatorPro (task_calculator.cpp)
+    Interactive calculator supporting basic arithmetic operations.
+
+  • NeuralShell (task_shell.cpp)
+    Interactive sub-shell task running inside the OS simulator.
+
+  • SysPulse (task_syspulse.cpp)
+    Background system monitor displaying resource usage periodically.
+
+  • FileManager (task_filemanager.cpp)
+    File operations (create, delete, list, rename).
+
+  • FileInfoInspector (task_fileinfo.cpp)
+    Displays metadata/info about specified files.
+
+  • MusicPlayer (task_music.cpp)
+    Background music player simulation.
+
+  • GhostTyper (task_ghost.cpp)
+    Typewriter text effect display.
+
+  • Minesweeper (task_minesweeper.cpp)
+    Text-based Minesweeper game.
+
+  • SnakeGame (task_snake.cpp)
+    Text-based Snake game.
+
+  • FileCopySimulator (task_filecopy.cpp)
+    Simulates a file copy operation with progress.
+
+  • PrintSpooler (task_spooler.cpp)
+    Background print spooler simulation.
+
+  • MemStressTester (task_memstress.cpp)
+    Allocates and exercises memory to stress-test the system.
+
+  • CognitiveHUD (task_hud.cpp)
+    Background heads-up display showing system statistics.
+
+  • DeadlockArena (task_deadlock.cpp)
+    Demonstrates deadlock scenarios for educational purposes.
+
+  • ProcessGraveyard (task_graveyard.cpp)
+    Logs and displays information about terminated processes.
+
+  • KernelModeConsole (task_kernel_con.cpp)
+    Provides a kernel-level console for privileged operations.
+
+
+7. KEY OS CONCEPTS IMPLEMENTED
+================================================================================
+
+  7.1  Process Management
+  ───────────────────────
+    • Process creation via fork() + execvp()
+    • PCB (Process Control Block) with 5 states: READY, RUNNING, BLOCKED,
+      TERMINATED, ZOMBIE
+    • Process table (32 slots, mutex-protected)
+    • SIGCHLD-based zombie reaping via waitpid(WNOHANG)
+    • Graceful shutdown: SIGTERM → wait → SIGKILL
+
+  7.2  CPU Scheduling
+  ───────────────────
+    • Multi-Level Queue (3 levels) with different algorithms per level
+    • Round Robin (L0), Priority with Aging (L1), FCFS (L2)
+    • Priority Aging to prevent starvation (wait_cycles threshold)
+    • Adaptive weight vector updated every 10 scheduler cycles
+    • Background scheduler thread running at 100ms quantum
+
+  7.3  Memory Management
+  ──────────────────────
+    • Simulated E820 memory map (matching real x86 BIOS conventions)
+    • Page-based allocation (4 KiB pages)
+    • FreeRegion linked list and Page free list
+    • Slab-style pre-allocated pools (no malloc after init)
+    • MB-level wrappers for kernel resource manager
+
+  7.4  Inter-Process Communication (IPC)
+  ──────────────────────────────────────
+    • Bi-directional pipes: kernel↔child
+    • Structured IPC_Message protocol (request, grant, deny, task_done)
+    • Resource request/grant handshake before task execution
+    • Pipe FDs passed as argv to execvp'd task binaries
+
+  7.5  Resource Management
+  ────────────────────────
+    • RAM and HDD tracking with grant/deny enforcement
+    • Kernel Mood system (CALM / STRESSED / CRITICAL)
+    • CRITICAL mood blocks all new process launches
+    • HDD usage persists (files on disk) while RAM is released on exit
+
+  7.6  Deadlock Detection
+  ───────────────────────
+    • Resource Allocation Graph (RAG) with 2 resource types
+    • Bipartite graph encoding (positive=process, negative=resource nodes)
+    • Iterative DFS with 3-colour marking for cycle detection
+    • Thread-safe graph mutations via mutex
+    • Deadlock reported with list of involved PIDs
+
+  7.7  Signal Handling
+  ────────────────────
+    • SIGCHLD — automatic zombie reaping
+    • SIGTERM — graceful task shutdown (each task handles individually)
+    • SIGKILL — forced termination during shutdown sequence
+    • sigaction() used for reliable signal registration
+
+  7.8  Synchronization
+  ────────────────────
+    • pthread_mutex for process table, resource pool, and RAG
+    • pthread_create/detach for background scheduler thread
+    • Volatile flags for cross-thread shutdown signalling
+
+
+8. FILE STATISTICS
+================================================================================
+
+  ┌──────────────────────────────┬───────┬──────────┐
+  │  File                        │ Lines │  Bytes   │
+  ├──────────────────────────────┼───────┼──────────┤
+  │  kernel.h                    │  125  │   6,794  │
+  │  main.cpp                    │  361  │  16,995  │
+  │  scheduler.cpp               │  280  │  12,203  │
+  │  resource_manager.cpp        │  325  │  15,038  │
+  │  memory.cpp                  │  267  │  12,632  │
+  │  process_launcher.cpp        │  240  │  11,654  │
+  │  deadlock_detector.cpp       │  254  │   9,925  │
+  │  deadlock_detector.h         │   —   │   1,485  │
+  │  task_shell.cpp              │   —   │   6,668  │
+  │  task_cognipad.cpp           │  185  │   6,104  │
+  │  task_calculator.cpp         │   —   │   5,441  │
+  │  task_clock.cpp              │  113  │   3,612  │
+  │  task_syspulse.cpp           │   —   │   3,428  │
+  │  task_filemanager.cpp        │   —   │   4,272  │
+  │  task_fileinfo.cpp           │   —   │   3,354  │
+  │  task_music.cpp              │   —   │   2,602  │
+  │  task_ghost.cpp              │   —   │   2,792  │
+  │  task_minesweeper.cpp        │   —   │   5,053  │
+  │  task_snake.cpp              │   —   │   5,165  │
+  │  task_filecopy.cpp           │   —   │   3,499  │
+  │  task_spooler.cpp            │   —   │   2,902  │
+  │  task_memstress.cpp          │   —   │   2,762  │
+  │  task_hud.cpp                │   —   │   3,188  │
+  │  task_deadlock.cpp           │   —   │   5,039  │
+  │  task_graveyard.cpp          │   —   │   3,933  │
+  │  task_kernel_con.cpp         │   —   │   4,567  │
+  │  Makefile                    │   34  │     743  │
+  │  Makefile.tasks              │   —   │   4,796  │
+  ├──────────────────────────────┼───────┼──────────┤
+  │  TOTAL SOURCE FILES          │  27   │ ~166 KB  │
+  └──────────────────────────────┴───────┴──────────┘
+
+
+9. COMPILATION & INCLUDE CHAIN
+================================================================================
+
+  The kernel compiles as a single translation unit:
+
+    main.cpp
+     └── #include "process_launcher.cpp"
+          └── #include "scheduler.cpp"
+               └── #include "resource_manager.cpp"
+                    ├── #include "memory.cpp"
+                    └── #include "deadlock_detector.cpp"
+
+  All modules pull in:  #include "../include/kernel.h"
+
+  Task binaries compile independently, each defining their own local
+  IPC_Message struct to match the kernel.h layout.
+
+
+10. RUNTIME BEHAVIOR SUMMARY
+================================================================================
+
+  1. User runs: ./NeuralOS_X 1 10 2
+  2. Boot animation displays (5 stages).
+  3. Memory manager initialises (E820 map, page lists).
+  4. Resource manager initialises (RAM=1024 MiB, HDD=10240 MiB).
+  5. Scheduler initialises (3 empty queues, default weights).
+  6. Background scheduler thread starts (100ms ticks).
+  7. Task menu displayed; user enters commands at "NeuralOS>" prompt.
+  8. Launching a task:
+     a. fork() creates child process
+     b. Child sends RESOURCE_REQUEST via pipe
+     c. Kernel checks RAM/HDD/mood → GRANT or DENY
+     d. If granted: child exec's the binary, kernel enqueues into scheduler
+     e. If denied: child exits, deadlock check performed
+  9. Scheduler continuously dispatches processes (L0 > L1 > L2 priority).
+  10. Aging prevents starvation of lower-priority processes.
+  11. On "shutdown": SIGTERM all tasks → wait → SIGKILL → goodbye.
+
+
+================================================================================
+                         END OF SUMMARY REPORT
+================================================================================
