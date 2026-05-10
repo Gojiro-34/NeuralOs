@@ -16,9 +16,14 @@
 #include <unistd.h>
 #include <signal.h>
 #include <ctime>
+#include <conio.h>
+#include <windows.h>
 
 static volatile bool g_quit = false;
-static void handle_sigterm(int) { g_quit = true; }
+
+static void handle_sigterm(int) { 
+    g_quit = true; 
+}
 
 static void send_task_done(int write_fd) {
     IPC_Message msg;
@@ -55,10 +60,11 @@ static void place_food() {
 
 static void print_grid(int score) {
     /*
-     * Clears the screen with newlines and redraws the game grid.
+     * Clears the screen with ANSI escapes and redraws the game grid.
      * Snake head is 'O', body is 'o', food is '*', empty is '.'.
      */
-    printf("\n  Score: %d  |  Controls: w/a/s/d + Enter  |  'q' to quit\n", score);
+    printf("\033[2J\033[H"); // Clear screen and move cursor to top-left
+    printf("\n  Score: %d  |  Controls: Arrows or w/a/s/d  |  'q' to quit\n", score);
     printf("  +");
     for (int c = 0; c < COLS; c++) printf("-");
     printf("+\n");
@@ -104,21 +110,37 @@ int main(int argc, char* argv[]) {
 
     int score    = 0;
     bool running = true;
-    char line[16];
-
     while (!g_quit && running) {
         print_grid(score);
-        printf("  Move> ");
         fflush(stdout);
 
-        if (!fgets(line, sizeof(line), stdin)) break;
-        char ch = line[0];
-
-        if (ch == 'q') break;
-        if (ch == 'w') { dir_r = -1; dir_c =  0; }
-        if (ch == 's') { dir_r =  1; dir_c =  0; }
-        if (ch == 'a') { dir_r =  0; dir_c = -1; }
-        if (ch == 'd') { dir_r =  0; dir_c =  1; }
+        for(int t = 0; t < 200; t += 10) {
+            if (_kbhit()) {
+                int ch = _getch();
+                if (ch == 'q') {
+                    running = false;
+                    break;
+                }
+                if (ch == 224 || ch == 0) { // Arrow keys
+                    ch = _getch();
+                    switch(ch) {
+                        case 72: if (dir_r !=  1) { dir_r = -1; dir_c =  0; } break; // Up
+                        case 80: if (dir_r != -1) { dir_r =  1; dir_c =  0; } break; // Down
+                        case 77: if (dir_c != -1) { dir_r =  0; dir_c =  1; } break; // Right
+                        case 75: if (dir_c !=  1) { dir_r =  0; dir_c = -1; } break; // Left
+                    }
+                    break;
+                } else {
+                    if (ch == 'w' && dir_r !=  1) { dir_r = -1; dir_c =  0; break; }
+                    if (ch == 's' && dir_r != -1) { dir_r =  1; dir_c =  0; break; }
+                    if (ch == 'a' && dir_c !=  1) { dir_r =  0; dir_c = -1; break; }
+                    if (ch == 'd' && dir_c != -1) { dir_r =  0; dir_c =  1; break; }
+                }
+            }
+            Sleep(10);
+        }
+        if (!running && g_quit) break;
+        if (!running) break;
 
         // Move: shift body
         for (int i = snake_len - 1; i > 0; i--) {
@@ -131,14 +153,14 @@ int main(int argc, char* argv[]) {
         // Wall collision
         if (snake_r[0] < 0 || snake_r[0] >= ROWS ||
             snake_c[0] < 0 || snake_c[0] >= COLS) {
-            printf("\n  ✗ Hit the wall! Game over. Score: %d\n", score);
+            printf("\r\n  ✗ Hit the wall! Game over. Score: %d\r\n", score);
             running = false; break;
         }
 
         // Self collision
         for (int i = 1; i < snake_len; i++) {
             if (snake_r[0] == snake_r[i] && snake_c[0] == snake_c[i]) {
-                printf("\n  ✗ Ate yourself! Game over. Score: %d\n", score);
+                printf("\r\n  ✗ Ate yourself! Game over. Score: %d\r\n", score);
                 running = false; break;
             }
         }
@@ -154,6 +176,11 @@ int main(int argc, char* argv[]) {
             }
             place_food();
         }
+    }
+
+    if (!running) {
+        // Wait briefly so user can see game over message
+        Sleep(1500);
     }
 
     if (write_fd >= 0) send_task_done(write_fd);
