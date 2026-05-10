@@ -16,13 +16,47 @@
 #include <unistd.h>
 #include <signal.h>
 #include <ctime>
-#include <conio.h>
-#include <windows.h>
+#include <termios.h>
+#include <sys/select.h>
 
 static volatile bool g_quit = false;
+static struct termios orig_termios;
+static bool raw_mode_enabled = false;
+
+static void disable_raw_mode() {
+    if (raw_mode_enabled) {
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+        raw_mode_enabled = false;
+    }
+}
 
 static void handle_sigterm(int) { 
     g_quit = true; 
+    disable_raw_mode();
+}
+
+static void enable_raw_mode() {
+    tcgetattr(STDIN_FILENO, &orig_termios);
+    atexit(disable_raw_mode);
+
+    struct termios raw = orig_termios;
+    raw.c_lflag &= ~(ECHO | ICANON);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+    raw_mode_enabled = true;
+}
+
+static int _kbhit() {
+    struct timeval tv = { 0L, 0L };
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(STDIN_FILENO, &fds);
+    return select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) > 0;
+}
+
+static int _getch() {
+    char ch;
+    if (read(STDIN_FILENO, &ch, 1) > 0) return ch;
+    return 0;
 }
 
 static void send_task_done(int write_fd) {
@@ -110,6 +144,8 @@ int main(int argc, char* argv[]) {
 
     int score    = 0;
     bool running = true;
+    enable_raw_mode();
+
     while (!g_quit && running) {
         print_grid(score);
         fflush(stdout);
@@ -122,13 +158,17 @@ int main(int argc, char* argv[]) {
                     running = false;
                     break;
                 }
-                if (ch == 224 || ch == 0) { // Arrow keys
-                    ch = _getch();
-                    switch(ch) {
-                        case 72: if (dir_r !=  1) { dir_r = -1; dir_c =  0; dir_changed = true; } break; // Up
-                        case 80: if (dir_r != -1) { dir_r =  1; dir_c =  0; dir_changed = true; } break; // Down
-                        case 77: if (dir_c != -1) { dir_r =  0; dir_c =  1; dir_changed = true; } break; // Right
-                        case 75: if (dir_c !=  1) { dir_r =  0; dir_c = -1; dir_changed = true; } break; // Left
+                if (ch == '\033') { // Arrow keys (POSIX escape sequence)
+                    char seq[2];
+                    if (read(STDIN_FILENO, &seq[0], 1) == 1 && read(STDIN_FILENO, &seq[1], 1) == 1) {
+                        if (seq[0] == '[') {
+                            switch(seq[1]) {
+                                case 'A': if (dir_r !=  1) { dir_r = -1; dir_c =  0; dir_changed = true; } break; // Up
+                                case 'B': if (dir_r != -1) { dir_r =  1; dir_c =  0; dir_changed = true; } break; // Down
+                                case 'C': if (dir_c != -1) { dir_r =  0; dir_c =  1; dir_changed = true; } break; // Right
+                                case 'D': if (dir_c !=  1) { dir_r =  0; dir_c = -1; dir_changed = true; } break; // Left
+                            }
+                        }
                     }
                 } else {
                     if (ch == 'w' && dir_r !=  1) { dir_r = -1; dir_c =  0; dir_changed = true; }
@@ -137,7 +177,7 @@ int main(int argc, char* argv[]) {
                     else if (ch == 'd' && dir_c != -1) { dir_r =  0; dir_c =  1; dir_changed = true; }
                 }
             }
-            Sleep(10);
+            usleep(10000); // 10ms
         }
         if (!running && g_quit) break;
         if (!running) break;
@@ -153,6 +193,7 @@ int main(int argc, char* argv[]) {
         // Wall collision
         if (snake_r[0] < 0 || snake_r[0] >= ROWS ||
             snake_c[0] < 0 || snake_c[0] >= COLS) {
+            disable_raw_mode();
             printf("\r\n  ✗ Hit the wall! Game over. Score: %d\r\n", score);
             running = false; break;
         }
@@ -160,6 +201,7 @@ int main(int argc, char* argv[]) {
         // Self collision
         for (int i = 1; i < snake_len; i++) {
             if (snake_r[0] == snake_r[i] && snake_c[0] == snake_c[i]) {
+                disable_raw_mode();
                 printf("\r\n  ✗ Ate yourself! Game over. Score: %d\r\n", score);
                 running = false; break;
             }
@@ -178,9 +220,11 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    disable_raw_mode();
+
     if (!running) {
         // Wait briefly so user can see game over message
-        Sleep(1500);
+        usleep(1500000); // 1.5 seconds
     }
 
     if (write_fd >= 0) send_task_done(write_fd);
