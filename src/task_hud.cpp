@@ -32,13 +32,13 @@ static void send_task_done(int write_fd) {
 static void print_bar(const char* label, int pct) {
     /*
      * Prints a labelled ASCII bar chart row for a given
-     * percentage value (0–100). Bar width is 20 characters.
+     * percentage value (0-100). Bar width is 20 characters.
      */
     int filled = pct / 5;
     printf("  %-8s [", label);
     for (int i = 0; i < 20; i++)
-        printf("%c", i < filled ? '█' : '░');
-    printf("] %3d%%\n", pct);
+        printf("%c", i < filled ? '#' : '-');
+    printf("] %3d%%          \n", pct);
 }
 
 int main(int argc, char* argv[]) {
@@ -48,19 +48,19 @@ int main(int argc, char* argv[]) {
     signal(SIGTERM, handle_sigterm);
     srand((unsigned)time(nullptr) ^ getpid());
 
-    printf("\n╔══════════════════════════════════╗\n");
-    printf("║   NeuralOS X — Cognitive HUD     ║\n");
-    printf("╚══════════════════════════════════╝\n");
+    printf("\n+----------------------------------+\n");
+    printf("|   NeuralOS X - Cognitive HUD     |\n");
+    printf("+----------------------------------+\n");
 
     int ticks = 0;
-    const int MAX_TICKS = 10; // 10 × 2s = 20s
 
     // Simulated baseline values
     int cpu  = 20 + rand() % 20;
     int ram  = 30 + rand() % 20;
     int disk = 5  + rand() % 10;
+    bool first = true;
 
-    while (ticks < MAX_TICKS && !g_quit) {
+    while (!g_quit) {
         // Drift values slightly each tick
         cpu  = cpu  + (rand() % 11 - 5); if (cpu  < 5)  cpu  = 5;  if (cpu  > 95) cpu  = 95;
         ram  = ram  + (rand() % 7  - 3); if (ram  < 10) ram  = 10; if (ram  > 90) ram  = 90;
@@ -70,11 +70,16 @@ int main(int argc, char* argv[]) {
         char tbuf[32];
         strftime(tbuf, sizeof(tbuf), "%H:%M:%S", localtime(&now));
 
-        printf("\n  ── HUD Snapshot @ %s (tick %d/%d) ──\n", tbuf, ticks+1, MAX_TICKS);
+        if (!first) {
+            printf("\033[6A"); // Move up 6 lines
+        }
+        first = false;
+
+        printf("\n  -- HUD Snapshot @ %s (tick %d) --          \n", tbuf, ticks+1);
         print_bar("CPU",  cpu);
         print_bar("RAM",  ram);
         print_bar("DISK", disk);
-        printf("  Uptime: %d sec  |  Processes: %d\n", ticks * 2, 3 + ticks % 5);
+        printf("  Uptime: %d sec  |  Processes: %d          \n", ticks * 2, 3 + ticks % 5);
         fflush(stdout);
 
         sleep(2);
