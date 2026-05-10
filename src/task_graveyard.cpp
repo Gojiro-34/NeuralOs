@@ -105,6 +105,12 @@ int main(int argc, char* argv[]) {
     }
 
 done:
+    printf("\n  Press Enter to exit...\n");
+    while (!g_quit) {
+        int ch = getchar();
+        if (ch == '\n' || ch == EOF) break;
+    }
+
     printf("\n  [GY] ProcessGraveyard exiting.\n");
     if (write_fd >= 0) send_task_done(write_fd);
     if (read_fd  >= 0) close(read_fd);
