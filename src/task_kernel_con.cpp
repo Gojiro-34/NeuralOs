@@ -103,6 +103,23 @@ int main(int argc, char* argv[]) {
     printf("║  NeuralOS X — Kernel Console     ║\n");
     printf("║  *** KERNEL MODE — RESTRICTED *** ║\n");
     printf("╚══════════════════════════════════╝\n");
+
+    // --- Password Verification ---
+    char pass[64];
+    printf("  [SECURITY] Enter Kernel Password: ");
+    fflush(stdout);
+    if (!fgets(pass, sizeof(pass), stdin)) {
+        printf("\n  [ERROR] Input failed. Exiting.\n");
+        return 1;
+    }
+    pass[strcspn(pass, "\n")] = '\0';
+
+    if (strcmp(pass, "nural123") != 0) {
+        printf("  \033[1;31m[DENIED]\033[0m Invalid Kernel Password. Access Revoked.\n");
+        if (write_fd >= 0) send_task_done(write_fd);
+        return 1;
+    }
+    printf("  \033[1;32m[GRANTED]\033[0m Kernel Access Level 0 Verified.\n\n");
     printf("  Commands: ps | fkill <pid> | exit\n\n");
 
     char line[128];

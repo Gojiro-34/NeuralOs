@@ -93,7 +93,7 @@ static void builtin_ls(const char* path) {
     closedir(dir);
 }
 
-// ── Built-in: pwd ───────────────────────────────────────────
+// Built-in: pwd 
 static void builtin_pwd() {
     char cwd[512];
     if (getcwd(cwd, sizeof(cwd))) {
