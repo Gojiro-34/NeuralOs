@@ -76,13 +76,14 @@ int main(int argc, char* argv[]) {
 
     srand((unsigned)(getpid() ^ time(nullptr)));
 
-    printf("[SysPulse] Started (pid=%d). Will run for 8 seconds.\n", getpid());
+    printf("[SysPulse] Started (pid=%d). Will run continuously.\n", getpid());
 
-    const int DURATION = 8, INTERVAL = 2, TOTAL_RAM = 512;
+    const int INTERVAL = 2, TOTAL_RAM = 512;
     double cpu = 15.0 + (rand() % 30);
     double ram = 120.0 + (rand() % 100);
 
-    for (int t = 0; t < DURATION && !g_terminate; t += INTERVAL) {
+    bool first = true;
+    for (int t = 0; !g_terminate; t += INTERVAL) {
         cpu = clamp(cpu + (rand() % 21) - 10, 2.0, 98.0);
         ram = clamp(ram + (rand() % 41) - 20, 50.0, TOTAL_RAM - 20.0);
         double rpct = 100.0 * ram / TOTAL_RAM;
@@ -93,16 +94,22 @@ int main(int argc, char* argv[]) {
             rb[i] = (i < (int)(rpct / 5.0)) ? '#' : '-';
         }
 
-        printf("[SysPulse] T+%ds ─────────────────────────────\n", t);
-        printf("  CPU:  [%s] %5.1f%%\n", cb, cpu);
-        printf("  RAM:  [%s] %5.1f%%  (%d/%d MiB)\n", rb, rpct, (int)ram, TOTAL_RAM);
-        printf("  Load: %.2f  %.2f  %.2f\n",
+        if (!first) {
+            printf("\033[4A"); // Move cursor up 4 lines
+        }
+        first = false;
+
+        // Extra spaces added at the end to clear any leftover characters
+        printf("[SysPulse] T+%02ds ────────────────────────────      \n", t);
+        printf("  CPU:  [%s] %5.1f%%          \n", cb, cpu);
+        printf("  RAM:  [%s] %5.1f%%  (%d/%d MiB)          \n", rb, rpct, (int)ram, TOTAL_RAM);
+        printf("  Load: %.2f  %.2f  %.2f          \n",
                cpu/100*2, cpu/100*1.8+0.1, cpu/100*1.5+0.2);
         fflush(stdout);
         sleep(INTERVAL);
     }
 
-    if (g_terminate) printf("[SysPulse] Received SIGTERM — shutting down.\n");
+    if (g_terminate) printf("\n[SysPulse] Received SIGTERM — shutting down.\n");
     send_task_done_and_exit();
     return 0;
 }
