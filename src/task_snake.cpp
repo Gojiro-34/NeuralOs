@@ -98,7 +98,7 @@ static void print_grid(int score) {
      * Snake head is 'O', body is 'o', food is '*', empty is '.'.
      */
     printf("\033[2J\033[H"); // Clear screen and move cursor to top-left
-    printf("\n  Score: %d  |  Controls: Arrows or w/a/s/d  |  'q' to quit\n", score);
+    printf("\n  Score: %d  |  Controls: Arrows or w/a/s/d, 'p' pause, 'q' quit\n", score);
     printf("  +");
     for (int c = 0; c < COLS; c++) printf("-");
     printf("+\n");
@@ -130,57 +130,74 @@ int main(int argc, char* argv[]) {
     signal(SIGTERM, handle_sigterm);
     srand((unsigned)time(nullptr) ^ getpid());
 
-    // Init snake in middle
-    snake_len = 3;
-    snake_r[0] = ROWS/2; snake_c[0] = COLS/2;
-    snake_r[1] = ROWS/2; snake_c[1] = COLS/2 - 1;
-    snake_r[2] = ROWS/2; snake_c[2] = COLS/2 - 2;
-    dir_r = 0; dir_c = 1; // moving right
-    place_food();
-
     printf("\n╔══════════════════════════════════╗\n");
     printf("║   NeuralOS X — Snake Game        ║\n");
     printf("╚══════════════════════════════════╝\n");
 
-    int score    = 0;
-    bool running = true;
-    enable_raw_mode();
+    bool play_again = true;
+    while (!g_quit && play_again) {
+        // Init snake in middle
+        snake_len = 3;
+        snake_r[0] = ROWS/2; snake_c[0] = COLS/2;
+        snake_r[1] = ROWS/2; snake_c[1] = COLS/2 - 1;
+        snake_r[2] = ROWS/2; snake_c[2] = COLS/2 - 2;
+        dir_r = 0; dir_c = 1; // moving right
+        place_food();
 
-    while (!g_quit && running) {
-        print_grid(score);
-        fflush(stdout);
+        int score    = 0;
+        bool running = true;
+        bool paused  = false;
+        const char* death_reason = "";
 
-        bool dir_changed = false;
-        for(int t = 0; t < 200; t += 10) {
-            if (_kbhit() && !dir_changed) {
-                int ch = _getch();
-                if (ch == 'q') {
-                    running = false;
-                    break;
-                }
-                if (ch == '\033') { // Arrow keys (POSIX escape sequence)
-                    char seq[2];
-                    if (read(STDIN_FILENO, &seq[0], 1) == 1 && read(STDIN_FILENO, &seq[1], 1) == 1) {
-                        if (seq[0] == '[') {
-                            switch(seq[1]) {
-                                case 'A': if (dir_r !=  1) { dir_r = -1; dir_c =  0; dir_changed = true; } break; // Up
-                                case 'B': if (dir_r != -1) { dir_r =  1; dir_c =  0; dir_changed = true; } break; // Down
-                                case 'C': if (dir_c != -1) { dir_r =  0; dir_c =  1; dir_changed = true; } break; // Right
-                                case 'D': if (dir_c !=  1) { dir_r =  0; dir_c = -1; dir_changed = true; } break; // Left
+        enable_raw_mode();
+
+        while (!g_quit && running) {
+            print_grid(score);
+            if (paused) {
+                printf("  *** PAUSED *** Press 'p' to resume.\n");
+            }
+            fflush(stdout);
+
+            bool dir_changed = false;
+            for(int t = 0; t < 200; t += 10) {
+                if (_kbhit() && (!dir_changed || paused)) {
+                    int ch = _getch();
+                    if (ch == 'q') {
+                        running = false;
+                        play_again = false;
+                        break;
+                    }
+                    if (ch == 'p') {
+                        paused = !paused;
+                        break;
+                    }
+                    if (!paused) {
+                        if (ch == '\033') { // Arrow keys (POSIX escape sequence)
+                            char seq[2];
+                            if (read(STDIN_FILENO, &seq[0], 1) == 1 && read(STDIN_FILENO, &seq[1], 1) == 1) {
+                                if (seq[0] == '[') {
+                                    switch(seq[1]) {
+                                        case 'A': if (dir_r !=  1) { dir_r = -1; dir_c =  0; dir_changed = true; } break; // Up
+                                        case 'B': if (dir_r != -1) { dir_r =  1; dir_c =  0; dir_changed = true; } break; // Down
+                                        case 'C': if (dir_c != -1) { dir_r =  0; dir_c =  1; dir_changed = true; } break; // Right
+                                        case 'D': if (dir_c !=  1) { dir_r =  0; dir_c = -1; dir_changed = true; } break; // Left
+                                    }
+                                }
                             }
+                        } else {
+                            if (ch == 'w' && dir_r !=  1) { dir_r = -1; dir_c =  0; dir_changed = true; }
+                            else if (ch == 's' && dir_r != -1) { dir_r =  1; dir_c =  0; dir_changed = true; }
+                            else if (ch == 'a' && dir_c !=  1) { dir_r =  0; dir_c = -1; dir_changed = true; }
+                            else if (ch == 'd' && dir_c != -1) { dir_r =  0; dir_c =  1; dir_changed = true; }
                         }
                     }
-                } else {
-                    if (ch == 'w' && dir_r !=  1) { dir_r = -1; dir_c =  0; dir_changed = true; }
-                    else if (ch == 's' && dir_r != -1) { dir_r =  1; dir_c =  0; dir_changed = true; }
-                    else if (ch == 'a' && dir_c !=  1) { dir_r =  0; dir_c = -1; dir_changed = true; }
-                    else if (ch == 'd' && dir_c != -1) { dir_r =  0; dir_c =  1; dir_changed = true; }
                 }
+                usleep(10000); // 10ms
             }
-            usleep(10000); // 10ms
-        }
-        if (!running && g_quit) break;
-        if (!running) break;
+            if (!running && g_quit) break;
+            if (!running) break;
+
+            if (paused) continue;
 
         // Move: shift body
         for (int i = snake_len - 1; i > 0; i--) {
@@ -190,23 +207,21 @@ int main(int argc, char* argv[]) {
         snake_r[0] += dir_r;
         snake_c[0] += dir_c;
 
-        // Wall collision
-        if (snake_r[0] < 0 || snake_r[0] >= ROWS ||
-            snake_c[0] < 0 || snake_c[0] >= COLS) {
-            disable_raw_mode();
-            printf("\r\n  ✗ Hit the wall! Game over. Score: %d\r\n", score);
-            running = false; break;
-        }
-
-        // Self collision
-        for (int i = 1; i < snake_len; i++) {
-            if (snake_r[0] == snake_r[i] && snake_c[0] == snake_c[i]) {
-                disable_raw_mode();
-                printf("\r\n  ✗ Ate yourself! Game over. Score: %d\r\n", score);
+            // Wall collision
+            if (snake_r[0] < 0 || snake_r[0] >= ROWS ||
+                snake_c[0] < 0 || snake_c[0] >= COLS) {
+                death_reason = "Hit the wall!";
                 running = false; break;
             }
-        }
-        if (!running) break;
+
+            // Self collision
+            for (int i = 1; i < snake_len; i++) {
+                if (snake_r[0] == snake_r[i] && snake_c[0] == snake_c[i]) {
+                    death_reason = "Ate yourself!";
+                    running = false; break;
+                }
+            }
+            if (!running) break;
 
         // Food
         if (snake_r[0] == food_r && snake_c[0] == food_c) {
@@ -220,11 +235,31 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    disable_raw_mode();
+        disable_raw_mode();
 
-    if (!running) {
-        // Wait briefly so user can see game over message
-        usleep(1500000); // 1.5 seconds
+        if (!g_quit && !running && play_again) {
+            if (strlen(death_reason) > 0) {
+                printf("\r\n  ✗ %s Game over. Score: %d\r\n", death_reason, score);
+            }
+            printf("\r\n  [Try Again? Press 'r' to restart | Press 'q' to quit]\r\n");
+            
+            enable_raw_mode();
+            while (!g_quit) {
+                if (_kbhit()) {
+                    int ch = _getch();
+                    if (ch == 'r' || ch == 'R') {
+                        play_again = true;
+                        break;
+                    }
+                    if (ch == 'q' || ch == 'Q') {
+                        play_again = false;
+                        break;
+                    }
+                }
+                usleep(50000);
+            }
+            disable_raw_mode();
+        }
     }
 
     if (write_fd >= 0) send_task_done(write_fd);
